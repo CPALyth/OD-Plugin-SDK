@@ -4,6 +4,7 @@
 
 HWND g_hOllyDbg;	// OD主界面句柄
 bool isLogging = false;	// 是否加入日志
+t_module* tModule;
 
 void RenameCall(t_dump* pDump);
 bool Str_IsBeginWith(const char* str1, const char* str2);
@@ -148,6 +149,24 @@ extc int ODBG_Pausedex(int reason, int extdata, t_reg *reg, DEBUG_EVENT* debugEv
 		_Readmemory(&cmd, pDump->sel0, selectLen, MM_SILENT);
 		// 反汇编选中的十六进制
 		_Disasm(cmd, selectLen, pDump->addr, NULL, &td, DISASM_ALL, _Plugingetvalue(VAL_MAINTHREADID));
+		if (cmd[0] == 0xCC)
+		{
+			isLogging = false;
+			return 1;
+		}
+		if (Str_IsBeginWith("call", td.result))
+		{
+			if (td.jmpaddr < tModule->base || td.jmpaddr > tModule->base + tModule->size)
+			{
+				isLogging = false;
+				_Go(0, 0, STEP_OVER, 0, 0);		// 不在主模块范围内就直接步过
+			}
+			else
+			{
+				_Go(0, 0, STEP_IN, 0, 0);
+			}
+			return 1;
+		}
 		if (Str_IsBeginWith("j", td.result))	// 指令以j开头
 		{
 			if (!Str_IsBeginWith("jmp", td.result))	// 但指令不为jmp,即条件跳转指令
@@ -173,6 +192,9 @@ extc int ODBG_Pausedex(int reason, int extdata, t_reg *reg, DEBUG_EVENT* debugEv
 void logJcc()
 {
 	isLogging = true;
+	// 获取反汇编窗口的结构信息
+	t_dump* t_disasm = (t_dump*)_Plugingetvalue(VAL_CPUDASM);
+	tModule = _Findmodule(t_disasm->addr);
 	_Go(0, 0, STEP_IN, 0, 0);
 }
 
